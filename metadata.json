@@ -1,0 +1,6 @@
+{
+  "name": "Lumina Room Tracker",
+  "description": "Real-time room occupancy and activity telemetry system for 5MP PoE AI turret cameras with RTSP-to-MJPEG bridging, browser-side TensorFlow.js person detection, ROI exclusion zones, and MQTT publishing.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
