@@ -98,6 +98,7 @@ export interface TrackerSettings {
   modelBase: CocoModelBase;            // 'lite_mobilenet_v2' | 'mobilenet_v2'
   inferenceWidth: number;              // 320 | 480 | 640 | 960, default 640
   mirrorVideo: boolean;
+  flipVertical: boolean;
   debugOverlay: boolean;
 }
 
@@ -118,6 +119,7 @@ export const DEFAULT_TRACKER_SETTINGS: TrackerSettings = {
   modelBase: 'lite_mobilenet_v2',
   inferenceWidth: 640,
   mirrorVideo: false,
+  flipVertical: false,
   debugOverlay: false,
 };
 

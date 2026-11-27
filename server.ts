@@ -474,6 +474,9 @@ async function startServer() {
   if (fs.existsSync(modelsDir)) {
     app.use('/models', express.static(modelsDir));
   }
+  app.use('/models', (_req, res) => {
+    res.status(404).json({ error: 'Local model weights not installed in public/models/' });
+  });
 
   // Mount Vite dev middleware in development, or static dist/ in production
   if (process.env.NODE_ENV !== 'production') {

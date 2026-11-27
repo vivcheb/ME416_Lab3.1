@@ -4,6 +4,8 @@ import {
   Camera,
   Check,
   Film,
+  FlipHorizontal2,
+  FlipVertical2,
   PenTool,
   Plus,
   RefreshCw,
@@ -28,6 +30,8 @@ interface VideoStageProps {
   source: VideoSourceType;
   onSourceChange: (src: VideoSourceType) => void;
   settings: TrackerSettings;
+  onToggleMirror: () => void;
+  onToggleFlipVertical: () => void;
   ignoreZones: PolygonZone[];
   onZonesChange: (zones: PolygonZone[]) => void;
   cameraState: CameraConnectionState;
@@ -88,6 +92,8 @@ export function VideoStage({
   source,
   onSourceChange,
   settings,
+  onToggleMirror,
+  onToggleFlipVertical,
   ignoreZones,
   onZonesChange,
   cameraState,
@@ -196,12 +202,13 @@ export function VideoStage({
 
           const curSettings = settingsRef.current;
           const mirrored = curSettings.mirrorVideo;
+          const flippedV = curSettings.flipVertical;
           const frameDims = frameSizeRef.current || { width: 640, height: 360 };
           const fw = Math.max(1, frameDims.width);
           const fh = Math.max(1, frameDims.height);
 
           const toCanvasX = (normX: number) => (mirrored ? 1 - normX : normX) * w;
-          const toCanvasY = (normY: number) => normY * h;
+          const toCanvasY = (normY: number) => (flippedV ? 1 - normY : normY) * h;
           const pxToCanvasX = (px: number) => toCanvasX(px / fw);
           const pxToCanvasY = (py: number) => toCanvasY(py / fh);
 
@@ -285,50 +292,80 @@ export function VideoStage({
             ctx.restore();
           }
 
-          // 3. Draw debug pending unconfirmed tracks
-          if (curSettings.debugOverlay && pendingTracksRef.current) {
+          // 3. Draw pending tracks (brief 1-2 frame confirmation ramp) so detected webcam/camera people show immediate visual feedback
+          if (pendingTracksRef.current && pendingTracksRef.current.length > 0) {
             for (const pTrack of pendingTracksRef.current) {
               const bx = mirrored
                 ? toCanvasX((pTrack.rawBox.x + pTrack.rawBox.width) / fw)
                 : pxToCanvasX(pTrack.rawBox.x);
-              const by = pxToCanvasY(pTrack.rawBox.y);
+              const by = flippedV
+                ? toCanvasY((pTrack.rawBox.y + pTrack.rawBox.height) / fh)
+                : pxToCanvasY(pTrack.rawBox.y);
               const bw = (pTrack.rawBox.width / fw) * w;
               const bh = (pTrack.rawBox.height / fh) * h;
 
               ctx.save();
-              ctx.strokeStyle = 'rgba(100, 116, 139, 0.75)';
-              ctx.setLineDash([4 * dpr, 4 * dpr]);
-              ctx.lineWidth = 1.5 * dpr;
-              ctx.strokeRect(bx, by, bw, bh);
-              ctx.font = `500 ${10 * dpr}px "JetBrains Mono", monospace`;
-              ctx.fillStyle = 'rgba(51, 65, 85, 0.9)';
-              ctx.fillText(`confirm ${pTrack.consecutiveHits}/3`, bx + 4 * dpr, by - 5 * dpr);
+              if (curSettings.debugOverlay) {
+                ctx.strokeStyle = 'rgba(100, 116, 139, 0.75)';
+                ctx.setLineDash([4 * dpr, 4 * dpr]);
+                ctx.lineWidth = 1.5 * dpr;
+                ctx.strokeRect(bx, by, bw, bh);
+              }
+
+              const psx = pxToCanvasX(pTrack.smoothedX);
+              const psy = pxToCanvasY(pTrack.smoothedY);
+              ctx.beginPath();
+              ctx.arc(psx, psy, 4.5 * dpr, 0, Math.PI * 2);
+              ctx.fillStyle = 'rgba(99, 102, 241, 0.85)';
+              ctx.fill();
+
+              const pendingLabel = curSettings.debugOverlay
+                ? `confirm ${pTrack.consecutiveHits}/3`
+                : 'Person · stationary';
+              ctx.font = `600 ${11 * dpr}px "JetBrains Mono", monospace`;
+              const padX = 7 * dpr;
+              const boxH = 20 * dpr;
+              const boxW = ctx.measureText(pendingLabel).width + padX * 2;
+              const margin = 8 * dpr;
+              let lx = psx + 10 * dpr;
+              if (lx + boxW > w - margin) lx = psx - 10 * dpr - boxW;
+              lx = Math.max(margin, Math.min(w - boxW - margin, lx));
+              const ly = Math.max(margin, Math.min(h - boxH - margin, psy - boxH / 2));
+
+              ctx.fillStyle = 'rgba(51, 65, 85, 0.78)';
+              ctx.beginPath();
+              ctx.roundRect(lx, ly, boxW, boxH, 6 * dpr);
+              ctx.fill();
+              ctx.fillStyle = '#FFFFFF';
+              ctx.textAlign = 'left';
+              ctx.textBaseline = 'middle';
+              ctx.fillText(pendingLabel, lx + padX, ly + boxH / 2);
               ctx.restore();
             }
           }
 
-          // 4. Draw confirmed tracks: smoothed centroid dot, floating label, and optional debug trails/boxes
+          // 4. Draw confirmed tracks: smoothed centroid dot, floating stationary/active tag, and optional debug trails/boxes
           const tracks = tracksRef.current || [];
           for (const track of tracks) {
             const sx = pxToCanvasX(track.smoothedX);
             const sy = pxToCanvasY(track.smoothedY);
 
             const isOccluded = track.occluded;
-            const isChaotic = track.state === 'chaotic';
+            const isActive = track.state === 'chaotic';
 
             const dotCore = isOccluded
               ? '#64748B'
-              : isChaotic
+              : isActive
               ? '#F43F5E'
               : '#0D9488';
             const dotHalo = isOccluded
               ? 'rgba(100, 116, 139, 0.28)'
-              : isChaotic
+              : isActive
               ? 'rgba(244, 63, 94, 0.32)'
               : 'rgba(20, 184, 166, 0.30)';
             const labelBg = isOccluded
               ? 'rgba(51, 65, 85, 0.86)'
-              : isChaotic
+              : isActive
               ? 'rgba(190, 18, 60, 0.90)'
               : 'rgba(15, 118, 110, 0.90)';
 
@@ -342,11 +379,13 @@ export function VideoStage({
               const bx = mirrored
                 ? toCanvasX((track.rawBox.x + track.rawBox.width) / fw)
                 : pxToCanvasX(track.rawBox.x);
-              const by = pxToCanvasY(track.rawBox.y);
+              const by = flippedV
+                ? toCanvasY((track.rawBox.y + track.rawBox.height) / fh)
+                : pxToCanvasY(track.rawBox.y);
               const bw = (track.rawBox.width / fw) * w;
               const bh = (track.rawBox.height / fh) * h;
 
-              ctx.strokeStyle = isChaotic
+              ctx.strokeStyle = isActive
                 ? 'rgba(244, 63, 94, 0.72)'
                 : 'rgba(20, 184, 166, 0.72)';
               ctx.lineWidth = 1.5 * dpr;
@@ -402,8 +441,12 @@ export function VideoStage({
             ctx.lineWidth = 2 * dpr;
             ctx.stroke();
 
-            // Floating label: ID <n> · calm|chaotic|occluded (clamped inside canvas edges)
-            const statusText = isOccluded ? 'occluded' : track.state;
+            // Floating label: ID <n> · stationary|active|occluded (clamped inside canvas edges)
+            const statusText = isOccluded
+              ? 'occluded'
+              : isActive
+              ? 'active'
+              : 'stationary';
             const debugSuffix = curSettings.debugOverlay
               ? ` (${track.normDisp.toFixed(2)})`
               : '';
@@ -450,7 +493,7 @@ export function VideoStage({
     return () => window.cancelAnimationFrame(rafId);
   }, [overlayCanvasRef, tracksRef, pendingTracksRef, frameSizeRef]);
 
-  // Convert pointer event to un-mirrored normalized frame coordinate (0..1)
+  // Convert pointer event to un-flipped normalized frame coordinate (0..1)
   const getNormalizedPoint = useCallback(
     (e: React.MouseEvent<HTMLCanvasElement>): Point | null => {
       const canvas = overlayCanvasRef.current;
@@ -461,10 +504,10 @@ export function VideoStage({
       const rawY = Math.min(1, Math.max(0, (e.clientY - rect.top) / rect.height));
       return {
         x: settings.mirrorVideo ? 1 - rawX : rawX,
-        y: rawY,
+        y: settings.flipVertical ? 1 - rawY : rawY,
       };
     },
-    [overlayCanvasRef, settings.mirrorVideo],
+    [overlayCanvasRef, settings.mirrorVideo, settings.flipVertical],
   );
 
   const finishDraftZone = useCallback(() => {
@@ -616,8 +659,36 @@ export function VideoStage({
           )}
         </div>
 
-        {/* ROI Drawing Controls */}
+        {/* Camera Flip & ROI Drawing Controls */}
         <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={onToggleMirror}
+            title="Flip camera horizontally (mirror)"
+            className={`inline-flex items-center gap-1.5 rounded-xl px-2.5 py-2 text-xs font-medium cursor-pointer whitespace-nowrap transition-colors ${
+              settings.mirrorVideo
+                ? 'bg-indigo-600 text-white shadow-sm'
+                : 'glass-btn text-slate-700'
+            }`}
+          >
+            <FlipHorizontal2 className="h-3.5 w-3.5" aria-hidden="true" />
+            Flip H
+          </button>
+
+          <button
+            type="button"
+            onClick={onToggleFlipVertical}
+            title="Invert camera vertically (upside-down flip)"
+            className={`inline-flex items-center gap-1.5 rounded-xl px-2.5 py-2 text-xs font-medium cursor-pointer whitespace-nowrap transition-colors ${
+              settings.flipVertical
+                ? 'bg-indigo-600 text-white shadow-sm'
+                : 'glass-btn text-slate-700'
+            }`}
+          >
+            <FlipVertical2 className="h-3.5 w-3.5" aria-hidden="true" />
+            Invert V
+          </button>
+
           {!isDrawingRoi ? (
             <button
               type="button"
@@ -762,8 +833,8 @@ export function VideoStage({
             onLoad={onMjpegLoad}
             onError={onMjpegError}
             className={`h-full w-full object-fill ${settings.mirrorVideo ? '-scale-x-100' : ''} ${
-              showIpCameraUnavailable ? 'opacity-20' : 'opacity-100'
-            }`}
+              settings.flipVertical ? '-scale-y-100' : ''
+            } ${showIpCameraUnavailable ? 'opacity-20' : 'opacity-100'}`}
           />
         )}
 
@@ -774,8 +845,8 @@ export function VideoStage({
           playsInline
           muted
           className={`h-full w-full object-fill ${settings.mirrorVideo ? '-scale-x-100' : ''} ${
-            source === 'webcam' && !webcamError ? 'block' : 'hidden'
-          }`}
+            settings.flipVertical ? '-scale-y-100' : ''
+          } ${source === 'webcam' && !webcamError ? 'block' : 'hidden'}`}
         />
 
         {/* Video Layer 3: Uploaded Local Video File <video> */}
@@ -788,8 +859,8 @@ export function VideoStage({
           muted
           controls={false}
           className={`h-full w-full object-fill ${settings.mirrorVideo ? '-scale-x-100' : ''} ${
-            source === 'simulation' && uploadedFileUrl ? 'block' : 'hidden'
-          }`}
+            settings.flipVertical ? '-scale-y-100' : ''
+          } ${source === 'simulation' && uploadedFileUrl ? 'block' : 'hidden'}`}
         />
 
         {/* Video Layer 4: Built-in Synthetic Room <canvas> */}
@@ -798,8 +869,8 @@ export function VideoStage({
           width={640}
           height={360}
           className={`h-full w-full object-fill ${settings.mirrorVideo ? '-scale-x-100' : ''} ${
-            source === 'simulation' && !uploadedFileUrl ? 'block' : 'hidden'
-          }`}
+            settings.flipVertical ? '-scale-y-100' : ''
+          } ${source === 'simulation' && !uploadedFileUrl ? 'block' : 'hidden'}`}
         />
 
         {/* Exact Overlaid HTML5 Canvas for ROI polygons, Centroids, Labels & Debug trails */}

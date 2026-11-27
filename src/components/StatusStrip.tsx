@@ -175,7 +175,7 @@ export function StatusStrip({
               <span className="font-mono-tabular text-4xl font-bold tracking-tight text-teal-800">
                 {calmCount}
               </span>
-              <span className="text-xs text-teal-700/80">steady</span>
+              <span className="text-xs text-teal-700/80">stationary</span>
             </div>
           </div>
 
@@ -185,7 +185,7 @@ export function StatusStrip({
               <span className="font-mono-tabular text-4xl font-bold tracking-tight text-rose-700">
                 {chaoticCount}
               </span>
-              <span className="text-xs text-rose-700/80">moving</span>
+              <span className="text-xs text-rose-700/80">active</span>
             </div>
           </div>
         </div>

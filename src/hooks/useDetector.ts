@@ -74,7 +74,8 @@ export function useDetector(modelBase: CocoModelBase, enabled: boolean) {
         const localUrl = `/models/${modelBase}/model.json`;
         try {
           const headRes = await fetch(localUrl, { method: 'HEAD' });
-          if (headRes.ok) {
+          const contentType = headRes.headers.get('content-type') || '';
+          if (headRes.ok && contentType.includes('application/json')) {
             modelUrl = localUrl;
             modelSource = 'local';
           }

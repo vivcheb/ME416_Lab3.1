@@ -294,7 +294,7 @@ export function TuningPanel({
               </div>
             </div>
 
-            {/* Mirror & Debug toggles */}
+            {/* Flip Horizontal (Mirror), Flip Vertical (Invert) & Debug toggles */}
             <div className="grid grid-cols-2 gap-2.5 pt-1">
               <button
                 type="button"
@@ -305,21 +305,33 @@ export function TuningPanel({
                     : 'glass-btn text-slate-700'
                 }`}
               >
-                Mirror: {settings.mirrorVideo ? 'On' : 'Off'}
+                Flip H (Mirror): {settings.mirrorVideo ? 'On' : 'Off'}
               </button>
 
               <button
                 type="button"
-                onClick={() => onChange({ debugOverlay: !settings.debugOverlay })}
+                onClick={() => onChange({ flipVertical: !settings.flipVertical })}
                 className={`rounded-xl px-3 py-2 text-xs font-medium transition-colors cursor-pointer whitespace-nowrap ${
-                  settings.debugOverlay
+                  settings.flipVertical
                     ? 'bg-indigo-600 text-white shadow-sm'
                     : 'glass-btn text-slate-700'
                 }`}
               >
-                Debug Overlay: {settings.debugOverlay ? 'On' : 'Off'}
+                Flip V (Invert): {settings.flipVertical ? 'On' : 'Off'}
               </button>
             </div>
+
+            <button
+              type="button"
+              onClick={() => onChange({ debugOverlay: !settings.debugOverlay })}
+              className={`w-full rounded-xl px-3 py-2 text-xs font-medium transition-colors cursor-pointer whitespace-nowrap ${
+                settings.debugOverlay
+                  ? 'bg-indigo-600 text-white shadow-sm'
+                  : 'glass-btn text-slate-700'
+              }`}
+            >
+              Debug Overlay: {settings.debugOverlay ? 'On' : 'Off'}
+            </button>
           </div>
         )}
       </div>

@@ -118,6 +118,7 @@ export default function App() {
   const lastHeartbeatAtRef = useRef<number>(0);
   const lastPublishedStatusRef = useRef<RoomStatus | null>(null);
   const autoSelectedCameraRef = useRef(false);
+  const sourceEpochRef = useRef(0);
 
   // Sync refs
   useEffect(() => {
@@ -265,13 +266,18 @@ export default function App() {
     [stopWebcam],
   );
 
+  const selectedWebcamIdRef = useRef(selectedWebcamId);
+  useEffect(() => {
+    selectedWebcamIdRef.current = selectedWebcamId;
+  }, [selectedWebcamId]);
+
   useEffect(() => {
     if (source !== 'webcam') {
       stopWebcam();
       return;
     }
 
-    void startWebcam(selectedWebcamId || undefined);
+    void startWebcam(selectedWebcamIdRef.current || undefined);
 
     const handleDeviceChange = async () => {
       try {
@@ -287,7 +293,7 @@ export default function App() {
       navigator.mediaDevices?.removeEventListener?.('devicechange', handleDeviceChange);
       stopWebcam();
     };
-  }, [source, startWebcam, stopWebcam, selectedWebcamId]);
+  }, [source, startWebcam, stopWebcam]);
 
   // Revoke uploaded video object URL on unmount / change
   useEffect(() => {
@@ -472,10 +478,11 @@ export default function App() {
           const ctx = offscreen.getContext('2d', { willReadFrequently: true });
           if (ctx) {
             ctx.drawImage(mediaEl, 0, 0, targetW, targetH);
+            const epochAtDispatch = sourceEpochRef.current;
             void detectCanvasRef
               .current(offscreen, curSettings.detectionConfidence)
               .then((res) => {
-                if (!active || !res) return;
+                if (!active || !res || epochAtDispatch !== sourceEpochRef.current) return;
                 const tNow = performance.now();
                 const tracked = trackerRef.current.processFrame(
                   res.detections,
@@ -562,13 +569,32 @@ export default function App() {
     [appendLog],
   );
 
-  const handleSourceChange = useCallback((next: VideoSourceType) => {
-    setSource(next);
-    setMjpegError(false);
+  const resetActiveSourceTracking = useCallback(() => {
+    sourceEpochRef.current += 1;
     trackerRef.current.reset(false);
     tracksRef.current = [];
     pendingTracksRef.current = [];
+    lastPublishedStatusRef.current = null;
+    setCounts({ total: 0, calm: 0, chaotic: 0 });
+    setRoomStatus('empty');
+    setRawRoomStatus('empty');
+    setLatestPacket(null);
+    setMetrics((prev) => ({
+      ...prev,
+      streamFps: 0,
+      detectionFps: 0,
+      inferenceMs: 0,
+    }));
   }, []);
+
+  const handleSourceChange = useCallback(
+    (next: VideoSourceType) => {
+      setSource(next);
+      setMjpegError(false);
+      resetActiveSourceTracking();
+    },
+    [resetActiveSourceTracking],
+  );
 
   const handleRetryCamera = useCallback(async () => {
     setMjpegError(false);
@@ -581,14 +607,17 @@ export default function App() {
     }
   }, [apiFetch, refreshStatus]);
 
-  const handleUploadVideoFile = useCallback((file: File) => {
-    setUploadedFileUrl((prev) => {
-      if (prev) URL.revokeObjectURL(prev);
-      return URL.createObjectURL(file);
-    });
-    setUploadedFileName(file.name);
-    trackerRef.current.reset(false);
-  }, []);
+  const handleUploadVideoFile = useCallback(
+    (file: File) => {
+      setUploadedFileUrl((prev) => {
+        if (prev) URL.revokeObjectURL(prev);
+        return URL.createObjectURL(file);
+      });
+      setUploadedFileName(file.name);
+      resetActiveSourceTracking();
+    },
+    [resetActiveSourceTracking],
+  );
 
   const handleClearVideoFile = useCallback(() => {
     setUploadedFileUrl((prev) => {
@@ -596,14 +625,17 @@ export default function App() {
       return null;
     });
     setUploadedFileName(null);
-    trackerRef.current.reset(false);
-  }, []);
+    resetActiveSourceTracking();
+  }, [resetActiveSourceTracking]);
 
-  const handleSelectSimPreset = useCallback((preset: SimPreset) => {
-    setSimPreset(preset);
-    simRef.current.loadPreset(preset);
-    trackerRef.current.reset(false);
-  }, []);
+  const handleSelectSimPreset = useCallback(
+    (preset: SimPreset) => {
+      setSimPreset(preset);
+      simRef.current.loadPreset(preset);
+      resetActiveSourceTracking();
+    },
+    [resetActiveSourceTracking],
+  );
 
   const handleAddSimPerson = useCallback((behavior: SimBehavior) => {
     simRef.current.addPerson(behavior);
@@ -664,6 +696,12 @@ export default function App() {
                   source={source}
                   onSourceChange={handleSourceChange}
                   settings={settings}
+                  onToggleMirror={() =>
+                    handleSettingsChange({ mirrorVideo: !settings.mirrorVideo })
+                  }
+                  onToggleFlipVertical={() =>
+                    handleSettingsChange({ flipVertical: !settings.flipVertical })
+                  }
                   ignoreZones={ignoreZones}
                   onZonesChange={setIgnoreZones}
                   cameraState={bridgeStatus?.cameraState ?? 'offline'}
@@ -682,7 +720,11 @@ export default function App() {
                   frameSizeRef={frameSizeRef}
                   webcamDevices={webcamDevices}
                   selectedWebcamId={selectedWebcamId}
-                  onSelectWebcam={setSelectedWebcamId}
+                  onSelectWebcam={(deviceId) => {
+                    setSelectedWebcamId(deviceId);
+                    resetActiveSourceTracking();
+                    void startWebcam(deviceId || undefined);
+                  }}
                   webcamError={webcamError}
                   onRetryWebcam={() => void startWebcam(selectedWebcamId || undefined)}
                   uploadedFileUrl={uploadedFileUrl}

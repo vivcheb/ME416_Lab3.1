@@ -106,6 +106,7 @@ export function sanitizeImportedConfig(raw: unknown): PersistedAppConfig {
       ? Number(s.inferenceWidth)
       : d.inferenceWidth,
     mirrorVideo: Boolean(s.mirrorVideo),
+    flipVertical: Boolean(s.flipVertical),
     debugOverlay: Boolean(s.debugOverlay),
   };
 
